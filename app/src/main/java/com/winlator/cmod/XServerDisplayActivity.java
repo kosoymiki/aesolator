@@ -9,6 +9,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.os.Bundle;
 import android.content.res.ColorStateList;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
@@ -1167,9 +1168,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         winHandler.setInputType((byte) container.getInputType());
         lc_all = container.getLC_ALL();
 
-        // Log only extra keys to avoid leaking user/runtime secrets in logs
-        Bundle extras = launchIntent.getExtras();
-        Log.d("XServerDisplayActivity", "Intent Extra Keys: " + (extras == null ? "[]" : extras.keySet()));
+        Log.d("XServerDisplayActivity", "Intent Extras Summary: " + summarizeIntentExtras(launchIntent));
 
         if (shortcut != null) {
             graphicsDriver = shortcut.getExtra("graphicsDriver", container.getGraphicsDriver());
@@ -7505,11 +7504,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
                 upscalerBackend,
                 frameGenerationActive,
                 upscalerFramegenMode,
-                upscalerBackendSource + ">" + upscalerPresetSource + ">" + upscalerFramegenSource,
-                resolvedFgOutput,
-                effectiveGeneratedFrames,
-                effectiveThermalGuard,
-                upscalerDeprecatedAliasUsed
+                upscalerBackendSource + ">" + upscalerPresetSource + ">" + upscalerFramegenSource
         );
 
         ForensicLogger.logEvent(
@@ -7928,6 +7923,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
         mergedEnv.put("AERO_FORENSIC_RUNTIME_SUMMARY", ForensicConfig.buildRuntimeSummary(runtimeForensicSnapshot));
         mergedEnv.put("AERO_FORENSIC_CAPTURE_SUMMARY", ForensicConfig.buildCaptureSummary(this, forensicSnapshot));
 
+        runArm64ecFexPreflightChecks(mergedEnv, runtimeForensicSnapshot);
+
         ForensicLogger.logEvent(
                 this,
                 "info",
@@ -7978,6 +7975,56 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
         envVars.clear();
         envVars.putAll(mergedEnv);
+    }
+
+    private void runArm64ecFexPreflightChecks(EnvVars mergedEnv, ForensicConfig.Snapshot snapshot) {
+        String runtimeModel = ContentProfile.normalizeRuntimeModel(effectiveRuntimeModel);
+        String emulatorResolved = container != null ? firstNonEmpty(container.getEmulator(), emulator) : emulator;
+        boolean arm64ecRoute = safeTrim(wineVersion).toLowerCase(Locale.ENGLISH).contains("arm64ec")
+                || safeTrim(runtimeModel).contains("bionic");
+        boolean fexExpected = arm64ecRoute && "fexcore".equalsIgnoreCase(firstNonEmpty(emulatorResolved, ""));
+
+        File fexInterpreter = new File(imageFs.getRootDir(), "usr/bin/FEXInterpreter");
+        File fexLoader = new File(imageFs.getRootDir(), "usr/bin/FEXLoader");
+        File wowbox64 = new File(imageFs.getRootDir(), "usr/bin/wowbox64");
+
+        setOrClearEnv(mergedEnv, "AERO_FEX_PREFLIGHT_EXPECTED", fexExpected ? "1" : "0");
+        setOrClearEnv(mergedEnv, "AERO_FEX_PREFLIGHT_INTERPRETER", fexInterpreter.isFile() ? fexInterpreter.getAbsolutePath() : "");
+        setOrClearEnv(mergedEnv, "AERO_FEX_PREFLIGHT_LOADER", fexLoader.isFile() ? fexLoader.getAbsolutePath() : "");
+        setOrClearEnv(mergedEnv, "AERO_FEX_PREFLIGHT_WOWBOX64", wowbox64.isFile() ? wowbox64.getAbsolutePath() : "");
+
+        String preflightStatus;
+        if (!fexExpected) {
+            preflightStatus = "skip";
+        } else if (fexInterpreter.isFile() && fexLoader.isFile()) {
+            preflightStatus = "ok";
+        } else {
+            preflightStatus = "missing-binaries";
+        }
+        setOrClearEnv(mergedEnv, "AERO_FEX_PREFLIGHT_STATUS", preflightStatus);
+
+        ForensicLogger.logEvent(
+                this,
+                "ok".equals(preflightStatus) ? "info" : "warn",
+                "FEX_PREFLIGHT_CHECK",
+                null,
+                "runtime_route",
+                "arm64ec/fex preflight check",
+                ForensicLogger.fields(
+                        "runtime_model", safeTrim(runtimeModel),
+                        "wine_version", safeTrim(wineVersion),
+                        "emulator", firstNonEmpty(emulatorResolved, ""),
+                        "fex_expected", fexExpected ? "1" : "0",
+                        "status", preflightStatus,
+                        "fex_interpreter", fexInterpreter.getAbsolutePath(),
+                        "fex_interpreter_exists", fexInterpreter.isFile() ? "1" : "0",
+                        "fex_loader", fexLoader.getAbsolutePath(),
+                        "fex_loader_exists", fexLoader.isFile() ? "1" : "0",
+                        "wowbox64", wowbox64.getAbsolutePath(),
+                        "wowbox64_exists", wowbox64.isFile() ? "1" : "0",
+                        "forensic_requested", snapshot != null && snapshot.enableFexLogs ? "1" : "0"
+                )
+        );
     }
 
     private ForensicConfig.Snapshot resolveRuntimeForensicSnapshot(ForensicConfig.Snapshot snapshot) {
@@ -10795,6 +10842,43 @@ public class XServerDisplayActivity extends AppCompatActivity {
         );
 
         applyUpscalerEnvVars(vulkanPrimaryRoute, socClass);
+    }
+
+
+    private String summarizeIntentExtras(Intent intent) {
+        if (intent == null) return "intent:null";
+        Bundle extras = intent.getExtras();
+        if (extras == null || extras.isEmpty()) return "extras:empty";
+        StringBuilder sb = new StringBuilder();
+        sb.append("extras{");
+        boolean first = true;
+        for (String key : extras.keySet()) {
+            if (!first) sb.append(", ");
+            first = false;
+            Object value = extras.get(key);
+            sb.append(key).append('=');
+            if (isSensitiveIntentKey(key)) {
+                sb.append("<redacted>");
+            } else if (value == null) {
+                sb.append("null");
+            } else {
+                String raw = String.valueOf(value);
+                if (raw.length() > 96) raw = raw.substring(0, 96) + "…";
+                sb.append(raw.replace('\n', ' '));
+            }
+        }
+        sb.append('}');
+        return sb.toString();
+    }
+
+    private boolean isSensitiveIntentKey(String key) {
+        if (key == null) return false;
+        String normalized = key.toLowerCase(Locale.ENGLISH);
+        return normalized.contains("token")
+                || normalized.contains("secret")
+                || normalized.contains("password")
+                || normalized.contains("cookie")
+                || normalized.contains("auth");
     }
 
     @Override
