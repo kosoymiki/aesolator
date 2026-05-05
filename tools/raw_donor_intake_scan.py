@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+codex/conduct-technical-analysis-for-10416-improvements-guhojl
 import os
+main
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -11,7 +13,10 @@ CFG = Path('tools/donor_sources_2026_05_04.json')
 MATRIX = Path('docs/DONOR_CLASS_SWEEP_MATRIX_2026-05-04.md')
 OUT = Path('docs/DONOR_24_RAW_INTAKE_REPORT_2026-05-04.md')
 UA = {'User-Agent': 'aesolator-raw-intake/1.0'}
+codex/conduct-technical-analysis-for-10416-improvements-guhojl
 TOKEN = os.environ.get('GITHUB_TOKEN', '').strip()
+
+main
 
 
 def parse_matrix_classes(path: Path):
@@ -31,10 +36,14 @@ def parse_matrix_classes(path: Path):
 def fetch_tree(owner: str, repo: str):
     for branch in ('main', 'master'):
         url = f'https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1'
+codex/conduct-technical-analysis-for-10416-improvements-guhojl
         headers = dict(UA)
         if TOKEN:
             headers['Authorization'] = f'Bearer {TOKEN}'
         req = urllib.request.Request(url, headers=headers)
+
+        req = urllib.request.Request(url, headers=UA)
+        main
         try:
             with urllib.request.urlopen(req, timeout=25) as r:
                 data = json.loads(r.read().decode('utf-8'))
@@ -62,7 +71,10 @@ def main():
         branch, paths = fetch_tree(owner, repo)
         if not paths:
             out.append('- status: `blocked (tree fetch failed)`')
+        codex/conduct-technical-analysis-for-10416-improvements-guhojl
             out.append('- hint: set `GITHUB_TOKEN` and rerun (especially for private repos / tighter API limits)')
+
+        main
             out.append('')
             continue
         by_name = defaultdict(list)

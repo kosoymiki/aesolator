@@ -35,6 +35,7 @@ Send me:
 If possible, send the archive directly:
 
 - `out/termux_donor_export_*.tar.gz`
+codex/conduct-technical-analysis-for-10416-improvements-guhojl
 
 
 ## Private repo/auth mode
@@ -50,3 +51,5 @@ bash tools/termux_export_donor_matrix.sh
 ## Merge-conflict safe mode
 
 If target repo already contains part of donor scripts/docs, prefer file-level copy of required scripts only (no recursive docs overwrite), then run export.
+
+main

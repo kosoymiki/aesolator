@@ -2,17 +2,24 @@
 from __future__ import annotations
 
 import json
+codex/conduct-technical-analysis-for-10416-improvements-guhojl
 import os
+
+main
 import urllib.request
 from pathlib import Path
 
 
 def fetch_text(url: str) -> str:
+codex/conduct-technical-analysis-for-10416-improvements-guhojl
     headers = {'User-Agent': 'aesolator-raw-manifest/1.0'}
     token = os.environ.get('GITHUB_TOKEN', '').strip()
     if token:
         headers['Authorization'] = f'Bearer {token}'
     req = urllib.request.Request(url, headers=headers)
+
+    req = urllib.request.Request(url, headers={'User-Agent': 'aesolator-raw-manifest/1.0'})
+    main
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode('utf-8')
 
